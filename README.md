@@ -54,8 +54,11 @@ Bridge.Server.get_messages("api/gateway")
 ```
 
 Bridge.Supervisor.start_bridge("api/driver")
-task = Task.async(Bridge.Server, :response, ["api/gateway", 10])
-Bridge.Server.add_message("api/driver", "active_process")
+response_timeout = 3000
+task = Task.async(Bridge.Server, :response, ["api/gateway", response_timeout])
+Bridge.Server.add_message("api/gateway", "someone left a message for you!")
+Task.await(task)
+
 
 We see above that the process is killed automatically restarted, but 
 it does not retain messages. New messages can be added and retrieved. 
