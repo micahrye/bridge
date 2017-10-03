@@ -1,6 +1,8 @@
 defmodule Bridge.Supervisor do
   use Supervisor
   
+  @uuid_length 17
+  
   @doc """
   Start the supervisor
   """
@@ -9,9 +11,19 @@ defmodule Bridge.Supervisor do
     Supervisor.start_link(__MODULE__, [], name: :api_bridge_supervisor)
   end
   
-  def start_bridge(endpoint) do
-    IO.puts "start_bridge of Bridge.Superviso"
-    Supervisor.start_child(:api_bridge_supervisor, [endpoint])
+  def start_bridge_server() do
+    IO.puts "start_bridge of Bridge.Supervisor"
+    uuid = generate_uuid()
+    case Supervisor.start_child(:api_bridge_supervisor, [uuid]) do
+      {:ok, pid} -> {:ok, pid, uuid}
+      {:error, msg} -> {:error, msg}
+    end
+  end
+  
+  defp generate_uuid do
+    :crypto.strong_rand_bytes(@uuid_length) 
+      |> Base.encode64 
+      |> binary_part(0, @uuid_length)
   end
   
   def init(_) do
