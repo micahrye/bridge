@@ -28,25 +28,29 @@ This will start the the application supervision tree defined in "lib/bridge/appl
 
 Start be creating a supervised bridge server
 ```
-iex> Bridge.Supervisor.start_bridge("api/gateway")
+iex> {:ok, pid, uuid} = Bridge.Supervisor.start_bridge_server()
 {:ok, #PID<0.136.0>}
 ```
 
 You can then add/get messages from the Bridge.Server 
 ```
-iex> Bridge.Server.add_message("api/gateway", "get_config")
+iex> alias Bridge.Message
 :ok
-iex> Bridge.Server.add_message("api/gateway", "active_process")
+iex> msg = Message.create("api/", uuid, %{data: "stuff"})
 :ok
-iex> Bridge.Server.get_messages("api/gateway")
-["active_process", "get_config", "current_process"]
+iex> idge.Server.add_message(uuid, msg)
+:ok
+iex> Bridge.Server.get_messages(uuid)
+{:ok,
+ %Bridge.Message{endpoint: "api/", payload: %{data: "stuff"},
+  uuid: "wiLsm+Ggs1CrMnHjB"}}
 ```
 
 If the supervised process crashes the supervisor will restart it
 ```
-iex> Registry.lookup(:api_bridge_registry, "api/gateway") |> List.first() |> elem(0) |> Process.exit(:kill)
+iex> Registry.lookup(:api_bridge_registry, uuid) |> List.first() |> elem(0) |> Process.exit(:kill)
 true
-iex> Bridge.Server.get_messages("api/gateway")
+iex> Bridge.Server.get_messages(uuid)
 []
 iex> Bridge.Server.add_message("api/gateway", "active_process")
 Bridge.Server.get_messages("api/gateway")
@@ -62,8 +66,11 @@ Bridge.Server.get_messages(uuid)
 
 
 {:ok, pid, uuid} = Bridge.Supervisor.start_bridge_server()
-msg = Message.create{endpoint: "api/", uuid: "12daf", payload: %{data: "stuff"}}
+msg = Message.create("api/", uuid, %{data: "stuff"})
+task = Task.async(Bridge.Server, :response, [uuid, response_timeout])
+:timer.sleep(1000)
 Bridge.Server.add_message(uuid, msg)
+results = Task.await(task)
 Bridge.Server.get_messages(uuid)
 
 Bridge.Server.close(uuid)

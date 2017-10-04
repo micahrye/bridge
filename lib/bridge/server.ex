@@ -19,12 +19,16 @@ defmodule Bridge.Server do
     end
   end
   
+  def is_alive(uuid) do
+    Process.alive?(via_tuple(uuid))
+  end
+  
   defp do_get_message(via) do
     try do 
       message = GenServer.call(via, :get_messages)
       {:ok, message}
     catch 
-      {:exit, _} -> {:error, "Process uuid no longer exists"}
+      :exit, _ -> {:error, "Process uuid no longer exists"}
     end
   end
   
@@ -72,9 +76,10 @@ defmodule Bridge.Server do
       {:error, reason} -> 
         {:error, reason}
       {:ok, response} -> 
-        case length(response) do
-          x when x <= 0 -> do_check_for_response(uuid)
-          _ -> List.first(GenServer.call(via_tuple(uuid), :get_messages))
+        IO.puts "do_check_for... response = #{inspect response}"
+        case map_size(response.payload) do
+          x when x === 0 -> do_check_for_response(uuid)
+          _ -> GenServer.call(via_tuple(uuid), :get_messages)
         end
     end
   end
@@ -87,7 +92,7 @@ defmodule Bridge.Server do
   
   def init(:ok) do
     Process.flag(:trap_exit, true)
-    send(self(), :set_timeout)
+    send(self(), {:set_timeout, @timeout})
     
     state = %Message{endpoint: nil, uuid: nil, payload: %{}}
     {:ok, state}
@@ -109,22 +114,22 @@ defmodule Bridge.Server do
   end
   
   def handle_cast(:clear_messages, messages) do
-    {:noreply,  %Message{}}
+    {:noreply,  %Message{endpoint: nil, uuid: nil, payload: %{}}}
   end
   
   def handle_cast(:close, state) do
     Process.send(self(), :end_process, [])
-    {:noreply, %Message{}}
+    {:noreply, %Message{endpoint: nil, uuid: nil, payload: %{}}}
   end
   
   def handle_cast({:close_after, delay}, state) do
     Process.send_after(self(), :end_process, delay)
-    {:noreply, %Message{}}
+    {:noreply, %Message{endpoint: nil, uuid: nil, payload: %{}}}
   end
   
-  def handle_info(:set_timeout, state) do
+  def handle_info({:set_timeout, delay}, state) do
     IO.puts "setting timeout to 5 sec"
-    Process.send_after(self(), :end_process, @timeout)
+    Process.send_after(self(), :end_process, delay)
     {:noreply, state}
   end
   
