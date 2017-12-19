@@ -49,6 +49,7 @@ defmodule Bridge do
       message = GenServer.call(via, :get_messages)
       {:ok, message}
     catch
+      # TODO: Try using implicit try/rescue
       :exit, _ -> {:error, "Process uuid no longer exists"}
     end
   end
@@ -135,7 +136,7 @@ defmodule Bridge do
 
   def handle_cast({:delayed_msg, new_message}, state) do
     # message will be added as new state after 10s
-    Process.send_after(self(), {:delayed_msg, new_message}, 10000)
+    Process.send_after(self(), {:delayed_msg, new_message}, 10_000)
     {:noreply, state}
   end
 

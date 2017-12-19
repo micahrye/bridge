@@ -1,8 +1,9 @@
 defmodule Bridge.Supervisor do
-  use Supervisor
   @moduledoc ~S"""
   The `Bridge.Supervisor` is responsible for initialzing and starting a `Bridge`.
   """
+
+  use Supervisor
 
   @uuid_length 17
 
@@ -23,25 +24,39 @@ defmodule Bridge.Supervisor do
   def create_bridge(timeout \\ -1) do
     IO.puts "create_bridge of Bridge.Supervisor"
     uuid = generate_uuid()
-    cond do
-      timeout < 0 ->
-        case Supervisor.start_child(:api_bridge_supervisor, [uuid]) do
-          {:ok, pid} -> {:ok, pid, uuid}
-          {:error, msg} -> {:error, msg}
-        end
-      timeout >= 0 ->
-        # timeout passed to `Bridge.start_link/2` which overwrites the
-        # default timeout of the Bridge.
-        case Supervisor.start_child(:api_bridge_supervisor, [uuid, timeout]) do
-          {:ok, pid} -> {:ok, pid, uuid}
-          {:error, msg} -> {:error, msg}
-        end
+    if timeout >= 0 do
+      # timeout passed to `Bridge.start_link/2` which overwrites the
+      # default timeout of the Bridge.
+      case Supervisor.start_child(:api_bridge_supervisor, [uuid, timeout]) do
+        {:ok, pid} -> {:ok, pid, uuid}
+        {:error, msg} -> {:error, msg}
+      end
+    else
+      case Supervisor.start_child(:api_bridge_supervisor, [uuid]) do
+        {:ok, pid} -> {:ok, pid, uuid}
+        {:error, msg} -> {:error, msg}
+      end
     end
+    # cond do
+    #   timeout < 0 ->
+    #     case Supervisor.start_child(:api_bridge_supervisor, [uuid]) do
+    #       {:ok, pid} -> {:ok, pid, uuid}
+    #       {:error, msg} -> {:error, msg}
+    #     end
+    #   timeout >= 0 ->
+    #     # timeout passed to `Bridge.start_link/2` which overwrites the
+    #     # default timeout of the Bridge.
+    #     case Supervisor.start_child(:api_bridge_supervisor, [uuid, timeout]) do
+    #       {:ok, pid} -> {:ok, pid, uuid}
+    #       {:error, msg} -> {:error, msg}
+    #     end
+    # end
   end
 
   @spec create_bridge(none) :: String.t
   defp generate_uuid do
-    :crypto.strong_rand_bytes(@uuid_length)
+      @uuid_length
+      |> :crypto.strong_rand_bytes()
       |> Base.encode64
       |> binary_part(0, @uuid_length)
   end
