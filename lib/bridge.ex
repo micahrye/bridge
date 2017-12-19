@@ -4,35 +4,38 @@ defmodule Bridge do
   Bridge is a generic application that was designed to allow HTTP and
   Websocket (WS) APIs to be combined as if it was only an HTTP
   interface. In the case of systems that might have a public HTTP API and
-  private, or otherwise, WS API Bridge creates a unique process for each
+  private, or otherwise, WS API. Bridge creates a unique process for each
   request that can later be responded to via different code paths and APIS
   to "finish" the initial HTTP request.
-  
-  Bridge can be used cases other than HTTP and WS too.
-  
-  `Bridge` uses `Registry` for managing unique instances of spawned processes.
-  The use of `Registry` allows for local, decentralized and scalable key-value
-  process storage. `Bridge` leverages this to create a unique name/process
-  for each bridging request. At some point a bridge request must recieve a
-  response, or it will timeout.
+
+  Bridge is a lightweight solution that uses `Registry` for managing unique instances
+  of spawned processes. The use of `Registry` allows for local, decentralized
+  and scalable key-value process storage. `Bridge` leverages this to create a
+  unique name/process for each bridging request. At some point a bridge request
+  must recieve a response, or it will timeout.
 
   The initial bridge request can start a task to continously check for a response.
   If the response is not recieved before the timeout perioud (default 30_000ms)
   the process will timeout and be cleared from the registry.
   """
-  
+
   alias Bridge.Message
 
   # default timeout after which the process will be stopped.
   @timeout 30_000
   @close_after 20
 
-  # API
+  @doc """
+  While start_link is part of public API bridge should be used though supervisor
+  call `Bridge.Supervisor.create_bridge/2`
+  """
+  @spec start_link(String.t, integer) :: {:ok, pid}
   def start_link(uuid, timeout \\ @timeout) do
     IO.puts "Bridge.start_link called with uuid #{uuid}"
     GenServer.start_link(__MODULE__, {:ok, timeout}, name: via_tuple(uuid))
   end
 
+  @spec get_message(String.t) :: {:ok, String.t} | {:error, String.t}
   def get_message(uuid) do
     case do_get_message(via_tuple(uuid)) do
       {:error, reason} -> {:error, reason}
@@ -45,12 +48,12 @@ defmodule Bridge do
       # If process DNE will through (EXIT) no process
       message = GenServer.call(via, :get_messages)
       {:ok, message}
-    catch 
+    catch
       :exit, _ -> {:error, "Process uuid no longer exists"}
     end
   end
 
-  @spec add_message(String.t, Bridge.Message.t) :: tuple
+  @spec add_message(String.t, Bridge.Message.t) :: :ok
   def add_message(uuid, %Message{} = msg) do
     GenServer.cast(via_tuple(uuid), {:add_message, msg})
   end
@@ -62,15 +65,18 @@ defmodule Bridge do
   def clear_messages(uuid) do
     GenServer.cast(via_tuple(uuid), :clear_messages)
   end
-      
+
+  @spec close(String.t) :: :ok
   def close(uuid) do
     GenServer.cast(via_tuple(uuid), :close)
   end
-  
+
+  @spec check_for_response(String.t, integer) :: Task.t
   def check_for_response(uuid, timeout) do
-    Task.async(Bridge, :response, [uuid, timeout]) 
+    Task.async(Bridge, :response, [uuid, timeout])
   end
-  
+
+  @spec response(String.t, integer) :: {:ok, term} | {:error, term} | {:timeout, String.t}
   def response(uuid, timeout \\ 5000) do
     IO.puts "Checking for response."
     task = Task.async(fn -> do_check_for_response(uuid) end)
@@ -84,7 +90,7 @@ defmodule Bridge do
       {:exit, reason} ->
         GenServer.cast(via_tuple(uuid), {:close_after, @close_after})
         {:exit, reason}
-      nil -> 
+      nil ->
         GenServer.cast(via_tuple(uuid), {:close_after, @close_after})
         # If we timeout we make sure to kill task
         Task.shutdown(task, :brutal_kill)
@@ -95,9 +101,9 @@ defmodule Bridge do
   defp do_check_for_response(uuid) do
     :timer.sleep(10) # sleep for 10ms
     case do_get_message(via_tuple(uuid)) do
-      {:error, reason} -> 
+      {:error, reason} ->
         {:error, reason}
-      {:ok, response} -> 
+      {:ok, response} ->
         case map_size(response.payload) do
           x when x === 0 -> do_check_for_response(uuid)
           _ -> GenServer.call(via_tuple(uuid), :get_messages)
@@ -110,16 +116,13 @@ defmodule Bridge do
   end
 
   # SERVER
-  
   def init({:ok, timeout}) do
     Process.flag(:trap_exit, true)
     send(self(), {:set_timeout, timeout})
-    
+
     state = %Message{endpoint: nil, uuid: nil, payload: %{}}
     {:ok, state}
   end
-  
-  
 
   def handle_call(:get_messages, _from, state) do
     {:reply, state, state}
@@ -173,7 +176,7 @@ defmodule Bridge do
 
   def handle_info({:DOWN, _, :process, _pid, _}, state) do
     # When a monitored process dies, we will receive a
-    # `:DOWN` message that we can use to remove the 
+    # `:DOWN` message that we can use to remove the
     # dead pid from our registry.
     IO.puts "GOING DOWN"
     {:noreply, state}

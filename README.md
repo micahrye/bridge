@@ -1,7 +1,7 @@
 # Bridge
 
 Bridge is an API bridge registry designed to enable communication between
-HTTP and Websocket (WS) endpoints. 
+HTTP and Websocket (WS) endpoints.
 
 ## Installation
 
@@ -24,15 +24,15 @@ be found at [https://hexdocs.pm/bridge](https://hexdocs.pm/bridge).
 ```
 $ iex -S mix
 ```
-This will start the the application supervision tree defined in "lib/bridge/application.ex" The bridge server is a supervised process. 
+This will start the the application supervision tree defined in "lib/bridge/application.ex" The bridge server is a supervised process.
 
 Start be creating a supervised bridge server
 ```
-iex> {:ok, pid, uuid} = Bridge.Supervisor.start_bridge()
+iex> {:ok, pid, uuid} = Bridge.Supervisor.create_bridge()
 {:ok, #PID<0.136.0>}
 ```
 
-You can then add/get messages from the Bridge.Server 
+You can then add/get messages from the Bridge.Server
 ```
 iex> alias Bridge.Message
 :ok
@@ -60,18 +60,18 @@ iex> Bridge.get_message(uuid)
   uuid: "wiLsm+Ggs1CrMnHjB"}}
 ```
 
-We see above that the process is killed automatically restarted, while 
-it does not retain messages, new messages can be added and then retrieved. 
+We see above that the process is killed automatically restarted, while
+it does not retain messages, new messages can be added and then retrieved.
 
-This next example shows how you can create a bridge and then start a task to 
-listen for a response over that bridge. While here we are simply adding the 
-message after a second this could be happing in any other process as long 
-as it has access to the Bridge module. 
+This next example shows how you can create a bridge and then start a task to
+listen for a response over that bridge. While here we are simply adding the
+message after a second this could be happing in any other process as long
+as it has access to the Bridge module.
 
 ```
 alias Bridge.Message
 response_timeout = 20000
-{:ok, pid, uuid} = Bridge.Supervisor.start_bridge()
+{:ok, pid, uuid} = Bridge.Supervisor.create_bridge()
 msg = Message.create("api/", uuid, %{data: "more stuff"})
 task = Bridge.check_for_response(uuid, response_timeout)
 :timer.sleep(1000)
@@ -80,4 +80,4 @@ results = Task.await(task)
 IO.inspect results
 ```
 
-task = Task.async(Bridge, :response, [uuid, response_timeout]) 
+task = Task.async(Bridge, :response, [uuid, response_timeout])
