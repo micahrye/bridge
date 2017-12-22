@@ -45,7 +45,8 @@ defmodule Bridge do
 
   defp do_get_message(via) do
     try do
-      # If process DNE will through (EXIT) no process
+      # If process DNE will through (EXIT) no process.
+      # We catch the exit and move respond with error
       message = GenServer.call(via, :get_messages)
       {:ok, message}
     catch
@@ -54,31 +55,52 @@ defmodule Bridge do
     end
   end
 
+  @doc """
+  Add a `%Bridge.Message` to the bridge identified by uuid
+
+  Returns `:ok` whether or not message actually added, since
+  if the bridge has been closed or expired the message will
+  not be added.
+  """
   @spec add_message(String.t, Bridge.Message.t) :: :ok
   def add_message(uuid, %Message{} = msg) do
     GenServer.cast(via_tuple(uuid), {:add_message, msg})
   end
 
-  def delayed_message(uuid, message) do
-    GenServer.cast(via_tuple(uuid), {:delayed_msg, message})
+  @doc """
+  Add a `%Bridge.Message` to the bridge identified by uuid
+
+  Returns `:ok` if message added to bridge. Returns :error if
+  the bridge does not exist. This will be slower than `Bridge.add_message`
+  """
+  @spec add_message_with_assurance(String.t, Bridge.Message.t) :: :ok | :error
+  def add_message_with_assurance(uuid, %Message{} = msg) do
+    case Registry.lookup(:api_bridge_registry, uuid) do
+      [] -> :error
+      _ -> GenServer.cast(via_tuple(uuid), {:add_message, msg})
+    end
   end
 
-  def clear_messages(uuid) do
-    GenServer.cast(via_tuple(uuid), :clear_messages)
-  end
-
+  @doc """
+  Close a bridge, no message will be recieved.
+  """
   @spec close(String.t) :: :ok
   def close(uuid) do
     GenServer.cast(via_tuple(uuid), :close)
   end
 
-  @spec check_for_response(String.t, integer) :: Task.t
-  def check_for_response(uuid, timeout) do
-    Task.async(Bridge, :response, [uuid, timeout])
+  @doc """
+  Response async starts a task that continues to check for a response
+  for bridge with uuid. 
+  """
+  @spec response_async(String.t, integer) :: Task.t
+  def response_async(uuid, timeout) do
+    # Task.async(Bridge, :response, [uuid, timeout])
+    Task.async(fn -> response(uuid, timeout) end)
   end
 
   @spec response(String.t, integer) :: {:ok, term} | {:error, term} | {:timeout, String.t}
-  def response(uuid, timeout \\ 5000) do
+  defp response(uuid, timeout \\ 5000) do
     IO.puts "Checking for response."
     task = Task.async(fn -> do_check_for_response(uuid) end)
     IO.puts "Task.yield for #{uuid}"
@@ -100,10 +122,12 @@ defmodule Bridge do
   end
 
   defp do_check_for_response(uuid) do
-    :timer.sleep(10) # sleep for 10ms
+    # sleep for 10ms
+    :timer.sleep(10)
     case do_get_message(via_tuple(uuid)) do
-      {:error, reason} ->
-        {:error, reason}
+      {:error, reason} -> {:error, reason}
+      # Here we have the bridge with a message with an empty payload.
+      # We assume that there has not been a reply and so we keep checking.
       {:ok, response} ->
         case map_size(response.payload) do
           x when x === 0 -> do_check_for_response(uuid)
@@ -134,16 +158,6 @@ defmodule Bridge do
     {:noreply, new_message}
   end
 
-  def handle_cast({:delayed_msg, new_message}, state) do
-    # message will be added as new state after 10s
-    Process.send_after(self(), {:delayed_msg, new_message}, 10_000)
-    {:noreply, state}
-  end
-
-  def handle_cast(:clear_messages, _messages) do
-    {:noreply,  %Message{endpoint: nil, uuid: nil, payload: %{}}}
-  end
-
   def handle_cast(:close, _state) do
     Process.send(self(), :end_process, [])
     {:noreply, %Message{endpoint: nil, uuid: nil, payload: %{}}}
@@ -163,11 +177,6 @@ defmodule Bridge do
   def handle_info(:end_process, state) do
     IO.puts "Process terminating from timeout... }"
     {:stop, :normal, state}
-  end
-
-  def handle_info({:delayed_msg, new_message}, _state) do
-    IO.puts "Delayed message received, new_message = #{new_message}"
-    {:noreply, new_message}
   end
 
   def handle_info({:EXIT, _from, :normal}, state) do

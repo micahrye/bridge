@@ -26,7 +26,8 @@ $ iex -S mix
 ```
 This will start the the application supervision tree defined in "lib/bridge/application.ex" The bridge server is a supervised process.
 
-Start be creating a supervised bridge server
+Start be creating a supervised bridge server. The uuid of bridge
+is used for interacting with it.
 ```
 iex> {:ok, pid, uuid} = Bridge.Supervisor.create_bridge()
 {:ok, #PID<0.136.0>}
@@ -40,7 +41,7 @@ iex> msg = Message.create("api/", uuid, %{data: "stuff"})
 :ok
 iex> Bridge.add_message(uuid, msg)
 :ok
-iex> Bridge.get_messages(uuid)
+iex> Bridge.get_message(uuid)
 {:ok,
  %Bridge.Message{endpoint: "api/", payload: %{data: "stuff"},
   uuid: "wiLsm+Ggs1CrMnHjB"}}
@@ -50,7 +51,7 @@ If the supervised process crashes the supervisor will restart it
 ```
 iex> Registry.lookup(:api_bridge_registry, uuid) |> List.first() |> elem(0) |> Process.exit(:kill)
 true
-iex> Bridge.get_messages(uuid)
+iex> Bridge.get_message(uuid)
 {:error, "Process uuid no longer exists"}
 iex> Bridge.add_message(uuid, msg)
 :ok
@@ -73,11 +74,11 @@ alias Bridge.Message
 response_timeout = 20000
 {:ok, pid, uuid} = Bridge.Supervisor.create_bridge()
 msg = Message.create("api/", uuid, %{data: "more stuff"})
-task = Bridge.check_for_response(uuid, response_timeout)
+task = Bridge.response_async(uuid, response_timeout)
 :timer.sleep(1000)
 Bridge.add_message(uuid, msg)
 results = Task.await(task)
-IO.inspect results
+IO.puts "task result = #{inspect results}"
 ```
 
 task = Task.async(Bridge, :response, [uuid, response_timeout])
